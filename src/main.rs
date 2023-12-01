@@ -1,7 +1,11 @@
 #![feature(portable_simd)]
+#![feature(array_chunks)]
+#![feature(if_let_guard)]
+#![feature(iter_intersperse)]
 
 mod tracer;
 mod regression;
+mod formula;
 
 use clap::Parser;
 use regression::Regressor;

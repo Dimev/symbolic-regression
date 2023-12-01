@@ -1,9 +1,14 @@
+use crate::formula::Formula;
+
 pub struct Regressor<'a> {
 	/// Input params
 	x: Vec<&'a [f32]>,
 
 	/// Outputs
 	y: &'a [f32],
+
+	/// current population of formulas
+	population: Vec<Formula<'a>>,
 }
 
 impl<'a> Regressor<'a> {
@@ -11,6 +16,7 @@ impl<'a> Regressor<'a> {
 		Self {
 			x: inputs.into_iter().copied().collect(),
 			y: outputs,
+			population: Vec::new(),
 		}
 	}
 }
