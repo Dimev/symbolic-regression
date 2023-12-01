@@ -132,6 +132,7 @@ impl<'a> Formula<'a> {
     }
 
     pub fn eval(&self, args: &[f32]) -> f32 {
+        assert_eq!(args.len(), self.names.len());
         let mut stack = Vec::with_capacity(self.operations.len());
 
         for op in &self.operations {
@@ -202,6 +203,7 @@ impl<'a> Formula<'a> {
     }
 
     pub fn eval_many(&self, n: usize, args: &[&[f32]]) -> Vec<f32> {
+        assert_eq!(args.len(), self.names.len());
         assert!(args.iter().all(|x| x.len() == n));
 
         let mut stack = Vec::with_capacity(self.operations.len());
@@ -218,97 +220,86 @@ impl<'a> Formula<'a> {
                 Op::Add => {
                     let r = stack.pop().unwrap();
                     let l = stack.last_mut().unwrap();
-                    let rt = r.par_chunks_exact(64).map(|x| f32x64::from_slice(x));
-                    l.to_mut()
-                        .par_chunks_exact_mut(64)
-                        .zip(rt)
-                        .for_each(|(l, r)| {
-                            (f32x64::from_slice(l) + r)
-                                .to_array()
-                                .iter()
-                                .zip(0..)
-                                .for_each(|(x, i)| l[i] = *x)
-                        });
+                    let rt = r.array_chunks().map(|x| f32x64::from_array(*x));
+                    l.to_mut().array_chunks_mut().zip(rt).for_each(|(l, r)| {
+                        (f32x64::from_array(*l) + r)
+                            .to_array()
+                            .iter()
+                            .zip(0..)
+                            .for_each(|(x, i)| l[i] = *x)
+                    });
                 }
                 Op::Sub => {
                     let r = stack.pop().unwrap();
                     let l = stack.last_mut().unwrap();
-                    let rt = r.par_chunks_exact(64).map(|x| f32x64::from_slice(x));
-                    l.to_mut()
-                        .par_chunks_exact_mut(64)
-                        .zip(rt)
-                        .for_each(|(l, r)| {
-                            (f32x64::from_slice(l) - r)
-                                .to_array()
-                                .iter()
-                                .zip(0..)
-                                .for_each(|(x, i)| l[i] = *x)
-                        });
+                    let rt = r.array_chunks().map(|x| f32x64::from_array(*x));
+                    l.to_mut().array_chunks_mut().zip(rt).for_each(|(l, r)| {
+                        (f32x64::from_array(*l) - r)
+                            .to_array()
+                            .iter()
+                            .zip(0..)
+                            .for_each(|(x, i)| l[i] = *x)
+                    });
                 }
                 Op::Mul => {
                     let r = stack.pop().unwrap();
                     let l = stack.last_mut().unwrap();
-                    let rt = r.par_chunks_exact(64).map(|x| f32x64::from_slice(x));
-                    l.to_mut()
-                        .par_chunks_exact_mut(64)
-                        .zip(rt)
-                        .for_each(|(l, r)| {
-                            (f32x64::from_slice(l) * r)
-                                .to_array()
-                                .iter()
-                                .zip(0..)
-                                .for_each(|(x, i)| l[i] = *x)
-                        });
+                    let rt = r.array_chunks().map(|x| f32x64::from_array(*x));
+                    l.to_mut().array_chunks_mut().zip(rt).for_each(|(l, r)| {
+                        (f32x64::from_array(*l) * r)
+                            .to_array()
+                            .iter()
+                            .zip(0..)
+                            .for_each(|(x, i)| l[i] = *x)
+                    });
                 }
                 Op::Div => {
                     let r = stack.pop().unwrap();
                     let l = stack.last_mut().unwrap();
-                    let rt = r.par_chunks_exact(64).map(|x| f32x64::from_slice(x));
-                    l.to_mut()
-                        .par_chunks_exact_mut(64)
-                        .zip(rt)
-                        .for_each(|(l, r)| {
-                            (f32x64::from_slice(l) / r)
-                                .to_array()
-                                .iter()
-                                .zip(0..)
-                                .for_each(|(x, i)| l[i] = *x)
-                        });
+                    let rt = r.array_chunks().map(|x| f32x64::from_array(*x));
+                    l.to_mut().array_chunks_mut().zip(rt).for_each(|(l, r)| {
+                        (f32x64::from_array(*l) / r)
+                            .to_array()
+                            .iter()
+                            .zip(0..)
+                            .for_each(|(x, i)| l[i] = *x)
+                    });
                 }
                 Op::Pow => {
                     let r = stack.pop().unwrap();
                     let l = stack.last_mut().unwrap();
-                    let rt = r.par_iter();
-                    let lt = l.par_iter();
-                    *l = lt.zip(rt).map(|(l, r)| l.powf(*r)).collect();
+                    l.to_mut()
+                        .iter_mut()
+                        .zip(r.iter())
+                        .for_each(|(l, r)| *l = l.powf(*r));
                 }
                 Op::Neg => {
                     let l = stack.last_mut().unwrap();
-                    l.to_mut().par_iter_mut().for_each(|x| *x = -*x);
+                    l.to_mut().iter_mut().for_each(|x| *x = -*x);
                 }
                 Op::Exp => {
                     let l = stack.last_mut().unwrap();
-                    l.to_mut().par_iter_mut().for_each(|x| *x = x.exp());
+                    l.to_mut().iter_mut().for_each(|x| *x = x.exp());
                 }
                 Op::Sqrt => {
                     let l = stack.last_mut().unwrap();
-                    l.to_mut().par_iter_mut().for_each(|x| *x = x.sqrt());
+                    l.to_mut().iter_mut().for_each(|x| *x = x.sqrt());
                 }
                 Op::Log => {
                     let l = stack.last_mut().unwrap();
-                    l.to_mut().par_iter_mut().for_each(|x| *x = x.log10());
+                    l.to_mut().iter_mut().for_each(|x| *x = x.log10());
                 }
                 Op::Sin => {
                     let l = stack.last_mut().unwrap();
-                    l.to_mut().par_iter_mut().for_each(|x| *x = x.sin());
+                    l.to_mut().iter_mut().for_each(|x| *x = x.sin());
                 }
                 Op::Cos => {
                     let l = stack.last_mut().unwrap();
-                    l.to_mut().par_iter_mut().for_each(|x| *x = x.cos());
+                    l.to_mut().iter_mut().for_each(|x| *x = x.cos());
                 }
                 Op::Tan => {
                     let l = stack.last_mut().unwrap();
-                    l.to_mut().par_iter_mut().for_each(|x| *x = x.tan());
+                    l.to_mut().iter_mut().for_each(|x| *x = x.tan());
                 }
             }
         }
@@ -381,5 +372,27 @@ fn print_formula() {
 #[test]
 fn eval_simd() {
     let f = Formula::from_str(&["x1", "b", "U"], "x1 b + U -").unwrap();
-    assert_eq!(f.eval_many(512, &[&[1.0; 512], &[2.0; 512], &[3.0; 512]]), vec![0.0; 512]);
+    assert_eq!(
+        f.eval_many(512, &[&[1.0; 512], &[2.0; 512], &[3.0; 512]]),
+        vec![0.0; 512]
+    );
+}
+
+#[test]
+fn eval_simd_a_lot() {
+    const N: usize = 10_000_000;
+
+    let f = Formula::from_str(
+        &["x1", "x2", "x3", "x4", "x5"],
+        "x1 x2 + x3 - x4 * x5 / exp log sqrt neg sin",
+    )
+    .unwrap();
+
+    let x1 = vec![1.0; N];
+    let x2 = vec![2.0; N];
+    let x3 = vec![3.0; N];
+    let x4 = vec![4.0; N];
+    let x5 = vec![5.0; N];
+
+    assert_eq!(f.eval_many(N, &[&x1, &x2, &x3, &x4, &x5]).len(), N);
 }

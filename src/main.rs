@@ -5,7 +5,7 @@
 
 mod tracer;
 mod regression;
-mod formula;
+pub mod formula;
 
 use clap::Parser;
 use regression::Regressor;
@@ -16,8 +16,6 @@ struct Args {
     #[arg(short, long, default_value_t = 10_000)]
     num_samples: usize,
 }
-
-
 
 fn main() {
     let args = Args::parse();
