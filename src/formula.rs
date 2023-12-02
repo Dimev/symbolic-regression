@@ -1,8 +1,7 @@
 use std::{borrow::Cow, fmt::Display, simd::f32x64};
 
-use rayon::prelude::*;
-
-// An operation in a formula
+/// An operation in a formula
+#[derive(Copy, Clone)]
 pub enum Op {
     /// Read a variable
     Var(usize),
@@ -57,6 +56,7 @@ pub enum Op {
 }
 
 /// A single formula
+#[derive(Clone)]
 pub struct Formula<'a> {
     operations: Vec<Op>,
     names: Vec<&'a str>,
@@ -127,8 +127,18 @@ impl<'a> Formula<'a> {
     pub fn new(names: &[&'a str]) -> Self {
         Self {
             names: names.to_vec(),
-            operations: vec![Op::Const(0.0)],
+            operations: std::iter::once(Op::Zero)
+                .chain(
+                    (0..names.len()).flat_map(|idx| {
+                        [Op::Var(idx), Op::Const(1.0), Op::Mul, Op::Add].into_iter()
+                    }),
+                )
+                .collect(),
         }
+    }
+
+    pub fn mutate(&self, seed: u64) -> Vec<Self> {
+        vec![self.clone()]
     }
 
     pub fn eval(&self, args: &[f32]) -> f32 {
@@ -376,6 +386,12 @@ fn eval_simd() {
         f.eval_many(512, &[&[1.0; 512], &[2.0; 512], &[3.0; 512]]),
         vec![0.0; 512]
     );
+}
+
+#[test]
+fn eval_new() {
+    let f = Formula::new(&["x1", "x2", "x3"]);
+    assert_eq!(f.eval(&[1.0, 2.0, 3.0]), 6.0);
 }
 
 #[test]
