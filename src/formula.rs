@@ -137,7 +137,11 @@ impl<'a> Formula<'a> {
         }
     }
 
-    pub fn mutate(&self, seed: u64) -> Vec<Self> {
+    pub fn size(&self) -> f32 {
+        self.operations.len() as f32
+    }
+
+    pub fn mutate(&self) -> Vec<Self> {
         vec![self.clone()]
     }
 

@@ -38,11 +38,11 @@ pub struct Params {
 impl Params {
     pub fn new(n: usize) -> Self {
         Self {
-            height: (0..n).into_par_iter().map(|_| fastrand::f32()).collect(),
-            dot_up: (0..n).into_par_iter().map(|_| fastrand::f32()).collect(),
-            scale: (0..n).into_par_iter().map(|_| fastrand::f32()).collect(),
-            density: (0..n).into_par_iter().map(|_| fastrand::f32()).collect(),
-            dot_l: (0..n).into_par_iter().map(|_| fastrand::f32()).collect(),
+            height: (0..n).into_iter().map(|_| fastrand::f32()).collect(),
+            dot_up: (0..n).into_iter().map(|_| fastrand::f32()).collect(),
+            scale: (0..n).into_iter().map(|_| fastrand::f32()).collect(),
+            density: (0..n).into_iter().map(|_| fastrand::f32()).collect(),
+            dot_l: (0..n).into_iter().map(|_| fastrand::f32()).collect(),
         }
     }
 
@@ -69,12 +69,12 @@ impl Params {
 
         TraceResult {
             emissive: combo
-                .par_iter()
-                .flat_map_iter(|x| x.emissive.to_array())
+                .iter()
+                .flat_map(|x| x.emissive.to_array())
                 .collect(),
             opacity: combo
-                .par_iter()
-                .flat_map_iter(|x| x.opacity.to_array())
+                .iter()
+                .flat_map(|x| x.opacity.to_array())
                 .collect(),
         }
     }
@@ -82,7 +82,7 @@ impl Params {
 
 fn trace(height: f32x64, dot_up: f32x64, scale: f32x64, density: f32x64, dot_l: f32x64) -> Trace {
     Trace {
-        emissive: f32x64::splat(0.0),
-        opacity: f32x64::splat(0.0),
+        emissive: dot_up + dot_up,
+        opacity: dot_up * dot_up,
     }
 }
