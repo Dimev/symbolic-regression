@@ -142,7 +142,27 @@ impl<'a> Formula<'a> {
     }
 
     pub fn mutate(&self) -> Vec<Self> {
-        vec![self.clone()]
+        // all mutations below are applied on one of the operations in the formula
+        let mut mutations = vec![self.clone()];
+        // replace 0 and 1 with normal numbers
+
+        // add a constant to numbers
+
+        // replace a constant with a 0 or 1
+
+        // insert arbitrary unary operations
+
+        // remove arbitrary unary operations
+
+        // insert binary operation with an argument
+
+        // replace binary operations with another
+
+        // remove binary operation and it's right side
+
+        // swap arguments
+
+        mutations
     }
 
     pub fn eval(&self, args: &[f32]) -> f32 {
