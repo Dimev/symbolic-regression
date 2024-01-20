@@ -222,6 +222,9 @@ impl<'a> Formula<'a> {
         self.random_op_idx(|x| x == Op::One)
             .map(|x| mutations.push(self.replace_op(x, Op::Const(1.0))));
 
+        self.random_op_idx(|x| x == Op::Pi)
+            .map(|x| mutations.push(self.replace_op(x, Op::Const(std::f32::consts::PI))));
+
         // add a constant to numbers
         for i in 1..5 {
             self.random_op_idx(Op::is_const).map(|x| {
@@ -242,6 +245,9 @@ impl<'a> Formula<'a> {
 
         self.random_op_idx(Op::is_const)
             .map(|x| mutations.push(self.replace_op(x, Op::One)));
+
+        self.random_op_idx(Op::is_const)
+            .map(|x| mutations.push(self.replace_op(x, Op::Pi)));
 
         // insert arbitrary unary operations
         mutations.push(self.insert_op(

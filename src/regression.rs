@@ -61,7 +61,6 @@ impl<'a> Regressor<'a> {
             .formulas
             .iter()
             .flat_map(|x| x.formula.mutate().into_iter())
-            .take(self.population)
             .collect::<Vec<Formula>>();
 
         // evaluate new population
@@ -86,8 +85,10 @@ impl<'a> Regressor<'a> {
             })
             .collect::<Vec<Pair>>();
 
-        // sort population
-        self.formulas
-            .par_sort_by(|l, r| l.score.total_cmp(&r.score));
+        // sort population, best to worst
+        self.formulas.sort_by(|l, r| l.score.total_cmp(&r.score));
+
+        // prune population size
+        self.formulas.truncate(self.population);
     }
 }
