@@ -67,7 +67,7 @@ impl<'a> Regressor<'a> {
         // evaluate new population
         self.formulas = new_formulas
             .into_par_iter()
-            .map(|formula| {
+            .filter_map(|formula| {
                 let score = formula
                     .eval_many(self.y.len(), &self.x)
                     .into_iter()
@@ -77,11 +77,17 @@ impl<'a> Regressor<'a> {
                     / self.y.len() as f32
                     + formula.size() * formula.size() * self.size_penalty;
 
-                Pair { score, formula }
+                // filter it out if it results in a nan
+                if score.is_nan() {
+                    None
+                } else {
+                    Some(Pair { score, formula })
+                }
             })
             .collect::<Vec<Pair>>();
 
         // sort population
-        self.formulas.par_sort_by(|l, r| l.score.total_cmp(&r.score));
+        self.formulas
+            .par_sort_by(|l, r| l.score.total_cmp(&r.score));
     }
 }

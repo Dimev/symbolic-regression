@@ -1,7 +1,7 @@
 use std::{borrow::Cow, fmt::Display, simd::f32x64};
 
 /// An operation in a formula
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, PartialOrd)]
 pub enum Op {
     /// Read a variable
     Var(usize),
@@ -54,6 +54,48 @@ pub enum Op {
     /// Tan
     Tan,
 }
+
+impl Op {
+    /// is this a const?
+    fn is_const(self) -> bool {
+        match self {
+            Op::Const(_) => true,
+            _ => false,
+        }
+    }
+
+    /// is this a unop?
+    fn is_unop(self) -> bool {
+        UNOPS.contains(&self)
+    }
+
+    /// is this a binop
+    fn is_binop(self) -> bool {
+        BINOPS.contains(&self)
+    }
+
+    /// Get a const value, or 0 if nothing
+    fn get_const_value(self) -> f32 {
+        match self {
+            Op::Const(v) => v,
+            _ => 0.0,
+        }
+    }
+}
+
+/// all unary operations
+const UNOPS: &[Op] = &[
+    Op::Neg,
+    Op::Exp,
+    Op::Sqrt,
+    Op::Log,
+    Op::Sin,
+    Op::Cos,
+    Op::Tan,
+];
+
+/// All binary operations
+const BINOPS: &[Op] = &[Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Pow];
 
 /// A single formula
 #[derive(Clone)]
@@ -141,22 +183,82 @@ impl<'a> Formula<'a> {
         self.operations.len() as f32
     }
 
+    fn replace_op(&self, index: usize, op: Op) -> Self {
+        let mut clone = self.clone();
+        clone.operations[index] = op;
+        clone
+    }
+
+    fn insert_op(&self, index: usize, op: Op) -> Self {
+        let mut clone = self.clone();
+        clone.operations.insert(index, op);
+        clone
+    }
+
+    fn delete_op(&self, index: usize) -> Self {
+        let mut clone = self.clone();
+        clone.operations.remove(index);
+        clone
+    }
+
+    fn random_op_idx(&self, mut f: impl FnMut(Op) -> bool) -> Option<usize> {
+        // find all operations that match
+        let indices = (0..self.operations.len())
+            .filter(|x| f(self.operations[*x]))
+            .collect::<Vec<usize>>();
+
+        // select a random one
+        fastrand::choice(indices)
+    }
+
     pub fn mutate(&self) -> Vec<Self> {
         // all mutations below are applied on one of the operations in the formula
         let mut mutations = vec![self.clone()];
+
         // replace 0 and 1 with normal numbers
+        self.random_op_idx(|x| x == Op::Zero)
+            .map(|x| mutations.push(self.replace_op(x, Op::Const(0.0))));
+
+        self.random_op_idx(|x| x == Op::One)
+            .map(|x| mutations.push(self.replace_op(x, Op::Const(1.0))));
 
         // add a constant to numbers
+        for i in 1..5 {
+            self.random_op_idx(Op::is_const).map(|x| {
+                mutations.push(self.replace_op(
+                    x,
+                    Op::Const(
+                        // add random offset
+                        self.operations[x].get_const_value() + fastrand::f32() * i as f32
+                            - (i as f32 * 0.5),
+                    ),
+                ))
+            });
+        }
 
         // replace a constant with a 0 or 1
+        self.random_op_idx(Op::is_const)
+            .map(|x| mutations.push(self.replace_op(x, Op::Zero)));
+
+        self.random_op_idx(Op::is_const)
+            .map(|x| mutations.push(self.replace_op(x, Op::One)));
 
         // insert arbitrary unary operations
+        mutations.push(self.insert_op(
+            fastrand::usize(1..=self.operations.len()),
+            *fastrand::choice(UNOPS).unwrap_or(&UNOPS[0]),
+        ));
 
         // remove arbitrary unary operations
+        self.random_op_idx(Op::is_unop)
+            .map(|x| mutations.push(self.delete_op(x)));
 
         // insert binary operation with an argument
 
         // replace binary operations with another
+        self.random_op_idx(Op::is_binop).map(|x| {
+            mutations.push(self.replace_op(x, *fastrand::choice(BINOPS).unwrap_or(&BINOPS[0])))
+        });
 
         // remove binary operation and it's right side
 

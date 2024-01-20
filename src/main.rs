@@ -24,6 +24,10 @@ struct Args {
     /// Penalty to use for formula size, bigger is worse
     #[arg(short, long, default_value_t = 0.5)]
     penalty: f32,
+
+    /// Population size to use for the regression
+    #[arg(short, long, default_value_t = 128)]
+    size: usize,
 }
 
 fn main() {
@@ -75,21 +79,21 @@ fn main() {
         );
     }
 
-    // check if we have at least 64 inputs
-    assert!(
-        columns.iter().all(|x| x.len() >= 64),
-        "Input needs at least 64 rows!"
-    );
+    println!("{} inputs loaded", columns[0].len());
 
-    // discard so we have a multiple of 64
+    // append extra columns so we have a multiple of 64
     let columns = columns
-        .iter()
+        .iter_mut()
         .map(|x| {
-            &x[..x
+            // new size, padded to multiples of 64
+            let size = x
                 .len()
                 .checked_next_multiple_of(64)
-                .expect("Input did not have any rows!")
-                - 64]
+                .expect("Input did not have any rows!");
+
+            // resize the array
+            x.resize(size, x[0]);
+            x.as_slice()
         })
         .collect::<Vec<&[f32]>>();
 
@@ -104,10 +108,9 @@ fn main() {
         target_name,
         param_names.join(", ")
     );
-    println!("{} inputs loaded", targets.len());
 
     // make regressor
-    let mut regres = Regressor::new(&param_names, params, &targets, targets.len(), args.penalty);
+    let mut regres = Regressor::new(&param_names, params, &targets, args.size, args.penalty);
 
     // regress
     for i in 0..args.iterations {
@@ -125,6 +128,6 @@ fn main() {
     // show the most promising formulas
     println!("Found the following formulas, in reverse polish notation:");
     for Pair { score, formula } in regres.get_population().iter().take(5) {
-        println!("Formula `{}` with score {:.4}", score, formula);
+        println!("Formula `{}` with score {:.4}", formula, score);
     }
 }
