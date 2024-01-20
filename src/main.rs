@@ -3,23 +3,19 @@
 #![feature(if_let_guard)]
 #![feature(iter_intersperse)]
 
-pub mod formula;
+mod formula;
 mod regression;
-mod tracer;
+
+use std::{fs::read_to_string, path::PathBuf};
 
 use clap::Parser;
 use regression::{Pair, Regressor};
-use tracer::Params;
 
 #[derive(Parser)]
 struct Args {
-    /// Number of samples to take for the path tracer
-    #[arg(short, long, default_value_t = 1024)]
-    rays: usize,
-
-    /// Population size for the evolutionary algorithm
-    #[arg(short, long, default_value_t = 10_000)]
-    size: usize,
+    /// Path to the csv file to train on
+    /// Last column is the column to use as result
+    path: PathBuf,
 
     /// number of steps to run the evolutionary algorithm for
     #[arg(short, long, default_value_t = 100)]
@@ -32,23 +28,94 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let ins = Params::new(args.rays);
-    let res = ins.trace();
-    let mut regres = Regressor::new(
-        &["dot-up"],
-        &[&ins.dot_up],
-        &res.emissive,
-        args.size,
-        args.penalty,
+
+    // load and parse the csv file
+    let file = read_to_string(args.path).expect("Failed to read file!");
+    let mut csv = file.lines();
+
+    // first line is the names of the parameters
+    let names = csv
+        .next()
+        .expect("No header found in the file!")
+        .split(',')
+        .collect::<Vec<&str>>();
+
+    // last column is the target to train for
+    let (target_name, param_names) = names.split_last().expect("File has less than two columns!");
+
+    // load the rest of the rows
+    let mut columns: Vec<Vec<f32>> = std::iter::repeat_with(|| Vec::new())
+        .take(names.len())
+        .collect();
+
+    for (index, row) in csv.enumerate() {
+        // skip empty line
+        if row.trim() == "" {
+            println!("skipped row {}, as it was empty", index + 2);
+            continue;
+        }
+
+        // parse the numbers on the row
+        let nums = row.split(',').map(|x| {
+            x.trim()
+                .parse::<f32>()
+                .expect(&format!("Could not parse f32 on line {}", index + 2))
+        });
+
+        // add them to the row
+        for (num, column) in nums.zip(&mut columns) {
+            column.push(num);
+        }
+
+        // check all columns still have the same number of values
+        assert!(
+            columns.iter().all(|x| x.len() == columns[0].len()),
+            "line {} does not have enough values!",
+            index + 2
+        );
+    }
+
+    // check if we have at least 64 inputs
+    assert!(
+        columns.iter().all(|x| x.len() >= 64),
+        "Input needs at least 64 rows!"
     );
 
+    // discard so we have a multiple of 64
+    let columns = columns
+        .iter()
+        .map(|x| {
+            &x[..x
+                .len()
+                .checked_next_multiple_of(64)
+                .expect("Input did not have any rows!")
+                - 64]
+        })
+        .collect::<Vec<&[f32]>>();
+
+    // split off the end
+    let (targets, params) = columns
+        .split_last()
+        .expect("File has less than two columns!");
+
+    // show what we are regressing
+    println!(
+        "Finding formula f to fit {} = f({}) as best as possible",
+        target_name,
+        param_names.join(", ")
+    );
+    println!("{} inputs loaded", targets.len());
+
+    // make regressor
+    let mut regres = Regressor::new(&param_names, params, &targets, targets.len(), args.penalty);
+
+    // regress
     for i in 0..args.iterations {
-        // regress
         regres.step();
 
         // print out the current fitness
         println!(
-            "Epoch {}, Best is {} with formula {}",
+            "Epoch {}, best score {:.4} with formula `{}`",
             i,
             regres.get_population()[0].score,
             regres.get_population()[0].formula
@@ -56,7 +123,8 @@ fn main() {
     }
 
     // show the most promising formulas
+    println!("Found the following formulas, in reverse polish notation:");
     for Pair { score, formula } in regres.get_population().iter().take(5) {
-        println!("Score: {:.4}, Formula: {}", score, formula);
+        println!("Formula `{}` with score {:.4}", score, formula);
     }
 }
