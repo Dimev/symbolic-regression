@@ -251,7 +251,15 @@ impl<'a> Formula<'a> {
 
     pub fn mutate(&self) -> Vec<Self> {
         // all mutations below are applied on one of the operations in the formula
-        let mut mutations = Vec::with_capacity(20);
+        let mut mutations = Vec::with_capacity(22);
+
+        // all possible values
+        let const_values = (0..self.names.len())
+            .map(|x| Op::Var(x))
+            .collect::<Vec<Op>>();
+
+        // ourselves, no mutations
+        mutations.push(self.clone());
 
         // replace 0 and 1 with normal numbers
         self.random_op_idx(|x| x == Op::Zero)
@@ -262,6 +270,12 @@ impl<'a> Formula<'a> {
 
         self.random_op_idx(|x| x == Op::Pi)
             .map(|x| mutations.push(self.replace_op(x, Op::Const(std::f32::consts::PI))));
+
+        // round a random number
+        self.random_op_idx(Op::is_const).map(|x| {
+            mutations
+                .push(self.replace_op(x, Op::Const(self.operations[x].get_const_value().round())))
+        });
 
         // modify a constant number
         for i in -2..=2 {
@@ -304,6 +318,20 @@ impl<'a> Formula<'a> {
 
         // insert binary operation with a valus on its right side
         // aka, insert the value, and then insert a binop
+        let idx = fastrand::usize(1..=self.operations.len());
+        let op = fastrand::choice(BINOPS).unwrap_or(&BINOPS[0]);
+        let val = fastrand::choice(
+            [
+                fastrand::choice(const_values.iter()).unwrap_or(&Op::Zero),
+                fastrand::choice([Op::Zero, Op::One, Op::Pi, Op::Const(0.0)].iter())
+                    .unwrap_or(&Op::Zero),
+            ]
+            .into_iter(),
+        )
+        .unwrap_or(&Op::Zero);
+
+        let clone = self.insert_op(idx, *op);
+        mutations.push(clone.insert_op(idx, *val));
 
         // insert a binary operation with a value on its left side
         // aka, insert the value before one of the ends, then intert the binop at the original location
@@ -341,6 +369,9 @@ impl<'a> Formula<'a> {
                 {
                     *op = new;
                 }
+
+                // push the clone
+                mutations.push(clone);
             });
 
         mutations

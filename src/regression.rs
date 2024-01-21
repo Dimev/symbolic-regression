@@ -34,6 +34,7 @@ impl<'a> Regressor<'a> {
         names: &[&'a str],
         inputs: &[&'a [f32]],
         outputs: &'a [f32],
+        formulas: &[&'a str],
         population_size: usize,
         size_penalty: f32,
     ) -> Self {
@@ -42,10 +43,21 @@ impl<'a> Regressor<'a> {
             y: outputs,
             population: population_size,
             size_penalty,
-            formulas: vec![Pair {
-                score: 0.0,
-                formula: Formula::new(names),
-            }],
+            formulas: if formulas.len() > 0 {
+                formulas
+                    .iter()
+                    .map(|x| Pair {
+                        score: 0.0,
+                        formula: Formula::from_str(names, x)
+                            .expect(&format!("Formula {} failed to parse", x)),
+                    })
+                    .collect()
+            } else {
+                vec![Pair {
+                    score: 0.0,
+                    formula: Formula::new(names),
+                }]
+            },
         }
     }
 

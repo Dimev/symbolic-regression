@@ -32,6 +32,10 @@ struct Args {
     /// Interval at which to report progress in seconds, if at all
     #[arg(long)]
     progress: Option<f32>,
+
+    /// initial formulas, deliminated by commas
+    #[arg(short, long)]
+    formulas: Option<String>,
 }
 
 fn main() {
@@ -113,8 +117,19 @@ fn main() {
         param_names.join(", ")
     );
 
+    // make initial functions
+    let funcs = args.formulas.unwrap_or(String::new());
+    let funcs = funcs.split(',').collect::<Vec<&str>>();
+
     // make regressor
-    let mut regres = Regressor::new(&param_names, params, &targets, args.size, args.penalty);
+    let mut regres = Regressor::new(
+        &param_names,
+        params,
+        &targets,
+        funcs.as_slice(),
+        args.size,
+        args.penalty,
+    );
 
     // start measuring
     let mut last_report = Instant::now();
