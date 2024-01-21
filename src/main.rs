@@ -36,10 +36,19 @@ struct Args {
     /// initial formulas, deliminated by commas
     #[arg(short, long)]
     formulas: Option<String>,
+
+    /// Seed for the mutations
+    #[arg(long)]
+    seed: Option<u64>,
 }
 
 fn main() {
     let args = Args::parse();
+
+    // seed
+    if let Some(seed) = args.seed {
+        fastrand::seed(seed)
+    }
 
     // load and parse the csv file
     let file = read_to_string(args.path).expect("Failed to read file!");
@@ -157,7 +166,7 @@ fn main() {
 
     // show the most promising formulas
     println!("Found the following formulas, in reverse polish notation:");
-    for Pair { score, formula } in regres.get_population().iter().take(5) {
-        println!("Formula `{}` with score {:.4}", formula, score);
+    for (i, Pair { score, formula }) in regres.get_population().iter().enumerate().take(5) {
+        println!("{}. Formula `{}` with score {:.4}", i + 1, formula, score);
     }
 }
