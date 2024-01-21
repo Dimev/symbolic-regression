@@ -209,6 +209,17 @@ impl<'a> Formula<'a> {
         clone
     }
 
+    fn delete_op_range(&self, range: RangeInclusive<usize>) -> Self {
+        let mut clone = self.clone();
+
+        // delete the range
+        for _ in range.clone() {
+            clone.operations.remove(*range.start());
+        }
+
+        clone
+    }
+
     fn random_op_idx(&self, mut f: impl FnMut(Op) -> bool) -> Option<usize> {
         // find all operations that match
         let indices = (0..self.operations.len())
@@ -335,9 +346,30 @@ impl<'a> Formula<'a> {
 
         // insert a binary operation with a value on its left side
         // aka, insert the value before one of the ends, then intert the binop at the original location
+        let idx = fastrand::usize(1..=self.operations.len());
+        let op = fastrand::choice(BINOPS).unwrap_or(&BINOPS[0]);
+        let val = fastrand::choice(
+            [
+                fastrand::choice(const_values.iter()).unwrap_or(&Op::Zero),
+                fastrand::choice([Op::Zero, Op::One, Op::Pi, Op::Const(0.0)].iter())
+                    .unwrap_or(&Op::Zero),
+            ]
+            .into_iter(),
+        )
+        .unwrap_or(&Op::Zero);
+
+        let clone = self.insert_op(idx, *op);
+        mutations.push(clone.insert_op(idx, *val));
 
         // remove binary operation and it's right side
         // aka, remove an entire range
+        self.random_op_idx(Op::is_binop).map(|x| {
+            // remove the op
+            let clone = self.delete_op(x);
+
+            // delete the range
+            mutations.push(clone.delete_op_range(clone.operation_range(x - 1)));
+        });
 
         // remove binary operation and it's left side
         // aka, remove the range before the first range
