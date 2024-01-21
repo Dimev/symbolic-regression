@@ -6,7 +6,7 @@
 mod formula;
 mod regression;
 
-use std::{fs::read_to_string, path::PathBuf};
+use std::{fs::read_to_string, path::PathBuf, time::Instant};
 
 use clap::Parser;
 use regression::{Pair, Regressor};
@@ -28,6 +28,10 @@ struct Args {
     /// Population size to use for the regression
     #[arg(short, long, default_value_t = 128)]
     size: usize,
+
+    /// Interval at which to report progress in seconds, if at all
+    #[arg(long)]
+    progress: Option<f32>,
 }
 
 fn main() {
@@ -112,17 +116,28 @@ fn main() {
     // make regressor
     let mut regres = Regressor::new(&param_names, params, &targets, args.size, args.penalty);
 
+    // start measuring
+    let mut last_report = Instant::now();
+
     // regress
     for i in 0..args.iterations {
         regres.step();
 
         // print out the current fitness
-        println!(
-            "Epoch {}, best score {:.4} with formula `{}`",
-            i,
-            regres.get_population()[0].score,
-            regres.get_population()[0].formula
-        );
+        if args
+            .progress
+            .filter(|x| last_report.elapsed().as_secs_f32() > *x)
+            .is_some()
+        {
+            println!(
+                "Epoch {}, best score {:.4} with formula `{}`",
+                i,
+                regres.get_population()[0].score,
+                regres.get_population()[0].formula,
+            );
+
+            last_report = Instant::now();
+        }
     }
 
     // show the most promising formulas

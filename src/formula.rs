@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, simd::f32x64};
+use std::{borrow::Cow, fmt::Display, ops::RangeInclusive, simd::f32x64};
 
 /// An operation in a formula
 #[derive(Copy, Clone, PartialEq, PartialOrd)]
@@ -60,6 +60,14 @@ impl Op {
     fn is_const(self) -> bool {
         match self {
             Op::Const(_) => true,
+            _ => false,
+        }
+    }
+
+    // is this a value (pushes on the stack)
+    fn is_value(self) -> bool {
+        match self {
+            Op::Var(_) | Op::Const(_) | Op::One | Op::Zero | Op::Pi => true,
             _ => false,
         }
     }
@@ -211,9 +219,39 @@ impl<'a> Formula<'a> {
         fastrand::choice(indices)
     }
 
+    fn operation_range(&self, index: usize) -> RangeInclusive<usize> {
+        // where it starts
+        let mut start = index;
+
+        // how many ends we need to skip
+        let mut ends = 0;
+
+        // work backwards
+        while start > 0 {
+            // if the current operation is binary, we can skip one end
+            if self.operations[start].is_binop() {
+                ends += 1;
+            }
+            // if the operation does not take from the stack, and we can't skip it, stop
+            if self.operations[start].is_value() && ends == 0 {
+                break;
+            }
+            // if it is an operation that does not take from the stack, we remove one end
+            else if self.operations[start].is_value() {
+                ends -= 1;
+            }
+
+            // go back one
+            start -= 1;
+        }
+
+        // return the found range
+        start..=index
+    }
+
     pub fn mutate(&self) -> Vec<Self> {
         // all mutations below are applied on one of the operations in the formula
-        let mut mutations = vec![self.clone()];
+        let mut mutations = Vec::with_capacity(20);
 
         // replace 0 and 1 with normal numbers
         self.random_op_idx(|x| x == Op::Zero)
@@ -225,15 +263,15 @@ impl<'a> Formula<'a> {
         self.random_op_idx(|x| x == Op::Pi)
             .map(|x| mutations.push(self.replace_op(x, Op::Const(std::f32::consts::PI))));
 
-        // add a constant to numbers
-        for i in 1..5 {
+        // modify a constant number
+        for i in -2..=2 {
             self.random_op_idx(Op::is_const).map(|x| {
                 mutations.push(self.replace_op(
                     x,
                     Op::Const(
                         // add random offset
-                        self.operations[x].get_const_value() + fastrand::f32() * i as f32
-                            - (i as f32 * 0.5),
+                        self.operations[x].get_const_value()
+                            + (fastrand::f32() * 0.5 + 0.5) * (10.0 as f32).powi(i),
                     ),
                 ))
             });
@@ -259,16 +297,51 @@ impl<'a> Formula<'a> {
         self.random_op_idx(Op::is_unop)
             .map(|x| mutations.push(self.delete_op(x)));
 
-        // insert binary operation with an argument
-
         // replace binary operations with another
         self.random_op_idx(Op::is_binop).map(|x| {
             mutations.push(self.replace_op(x, *fastrand::choice(BINOPS).unwrap_or(&BINOPS[0])))
         });
 
-        // remove binary operation and it's right side
+        // insert binary operation with a valus on its right side
+        // aka, insert the value, and then insert a binop
 
-        // swap arguments
+        // insert a binary operation with a value on its left side
+        // aka, insert the value before one of the ends, then intert the binop at the original location
+
+        // remove binary operation and it's right side
+        // aka, remove an entire range
+
+        // remove binary operation and it's left side
+        // aka, remove the range before the first range
+
+        // swap arguments of binary operation
+        // find two ranges before a binop, then swap them
+        self.random_op_idx(Op::is_binop)
+            .filter(|x| *x > 0)
+            .map(|x| {
+                let mut clone = self.clone();
+
+                // right range
+                let right = self.operation_range(x - 1);
+
+                // left range
+                let left = self.operation_range(right.start() - 1);
+
+                // copy the ranges
+                let right_ops = &self.operations[right.clone()];
+                let left_ops = &self.operations[left.clone()];
+
+                // stitch them together
+                let swapped_ops = right_ops.into_iter().chain(left_ops.into_iter()).copied();
+
+                // write them to the original range
+                for (op, new) in clone.operations[*(left.start())..=*(right.end())]
+                    .iter_mut()
+                    .zip(swapped_ops.into_iter())
+                {
+                    *op = new;
+                }
+            });
 
         mutations
     }
@@ -345,8 +418,19 @@ impl<'a> Formula<'a> {
     }
 
     pub fn eval_many(&self, n: usize, args: &[&[f32]]) -> Vec<f32> {
-        assert_eq!(args.len(), self.names.len());
-        assert!(args.iter().all(|x| x.len() == n));
+        assert_eq!(
+            args.len(),
+            self.names.len(),
+            "Number of arguments does not match the number of bound names in the function"
+        );
+        assert!(
+            args.iter().all(|x| x.len() == n),
+            "Arguments are not the same lenght"
+        );
+        assert!(
+            n % 64 == 0 && n > 0,
+            "Argument count is not a multiple of 64"
+        );
 
         let mut stack = Vec::with_capacity(self.operations.len());
 
