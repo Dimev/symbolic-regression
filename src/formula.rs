@@ -146,31 +146,45 @@ impl<'a> Display for Formula<'a> {
 
 impl<'a> Formula<'a> {
     pub fn from_str(names: &[&'a str], s: &str) -> Option<Self> {
+        let ops = s
+            .split_whitespace()
+            .map(|w| match w {
+                "pi" => Op::Pi,
+                "1" => Op::One,
+                "0" => Op::Zero,
+                "+" => Op::Add,
+                "-" => Op::Sub,
+                "*" => Op::Mul,
+                "/" => Op::Div,
+                "neg" => Op::Neg,
+                "pow" => Op::Pow,
+                "exp" => Op::Exp,
+                "sqrt" => Op::Sqrt,
+                "log" => Op::Log,
+                "sin" => Op::Sin,
+                "cos" => Op::Cos,
+                "tan" => Op::Tan,
+                x if let Ok(n) = x.parse() => Op::Const(n),
+                x if let Some(n) = names.iter().position(|n| n == &x) => Op::Var(n),
+                x => panic!("Unexpected token {x}"),
+            })
+            .collect::<Vec<Op>>();
+
+        // check if it's valid
+        assert!(
+            ops.iter().fold(0 as isize, |acc, op| if op.is_binop() {
+                acc - 1
+            } else if op.is_value() {
+                acc + 1
+            } else {
+                acc
+            }) == 1,
+            "Function does not return 1 value on the stack!"
+        );
+
         Some(Self {
             names: names.to_vec(),
-            operations: s
-                .split_whitespace()
-                .map(|w| match w {
-                    "pi" => Op::Pi,
-                    "1" => Op::One,
-                    "0" => Op::Zero,
-                    "+" => Op::Add,
-                    "-" => Op::Sub,
-                    "*" => Op::Mul,
-                    "/" => Op::Div,
-                    "neg" => Op::Neg,
-                    "pow" => Op::Pow,
-                    "exp" => Op::Exp,
-                    "sqrt" => Op::Sqrt,
-                    "log" => Op::Log,
-                    "sin" => Op::Sin,
-                    "cos" => Op::Cos,
-                    "tan" => Op::Tan,
-                    x if let Ok(n) = x.parse() => Op::Const(n),
-                    x if let Some(n) = names.iter().position(|n| n == &x) => Op::Var(n),
-                    x => panic!("Unexpected token {x}"),
-                })
-                .collect(),
+            operations: ops,
         })
     }
 

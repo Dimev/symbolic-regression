@@ -127,15 +127,25 @@ fn main() {
     );
 
     // make initial functions
-    let funcs = args.formulas.unwrap_or(String::new());
-    let funcs = funcs.split(',').collect::<Vec<&str>>();
+    let funcs = if let Some(formulas) = args.formulas {
+        formulas
+            .split(',')
+            .map(str::to_string)
+            .collect::<Vec<String>>()
+    } else {
+        Vec::new()
+    };
 
     // make regressor
     let mut regres = Regressor::new(
         &param_names,
         params,
         &targets,
-        funcs.as_slice(),
+        funcs
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .as_slice(),
         args.size,
         args.penalty,
     );
