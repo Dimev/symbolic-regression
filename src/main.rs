@@ -40,10 +40,22 @@ struct Args {
     /// Seed for the mutations
     #[arg(long)]
     seed: Option<u64>,
+
+    /// Number of threads to use, num physical CPU's by default
+    #[arg(short, long)]
+    jobs: Option<usize>,
 }
 
 fn main() {
     let args = Args::parse();
+
+    // set the number of threads
+    if let Some(jobs) = args.jobs {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(jobs)
+            .build_global()
+            .expect("Failed to set the number of threads");
+    }
 
     // seed
     if let Some(seed) = args.seed {
