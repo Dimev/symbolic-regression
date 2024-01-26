@@ -5,6 +5,7 @@
 
 mod formula;
 mod regression;
+mod evolve;
 
 use std::{fs::read_to_string, path::PathBuf, time::Instant};
 

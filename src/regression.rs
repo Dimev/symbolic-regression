@@ -38,26 +38,26 @@ impl<'a> Regressor<'a> {
         population_size: usize,
         size_penalty: f32,
     ) -> Self {
+        let formulas = formulas
+            .into_iter()
+            .map(|x| Pair {
+                score: 0.0,
+                formula: Formula::from_str(names, x)
+                    .expect(&format!("Formula {} failed to parse", x)),
+            })
+            .chain(std::iter::repeat_with(|| Pair {
+                score: 0.0,
+                formula: Formula::new(names),
+            }))
+            .take(population_size)
+            .collect();
+
         Self {
             x: inputs.into_iter().copied().collect(),
             y: outputs,
             population: population_size,
             size_penalty,
-            formulas: if formulas.len() > 0 {
-                formulas
-                    .iter()
-                    .map(|x| Pair {
-                        score: 0.0,
-                        formula: Formula::from_str(names, x)
-                            .expect(&format!("Formula {} failed to parse", x)),
-                    })
-                    .collect()
-            } else {
-                vec![Pair {
-                    score: 0.0,
-                    formula: Formula::new(names),
-                }]
-            },
+            formulas,
         }
     }
 
@@ -68,39 +68,59 @@ impl<'a> Regressor<'a> {
 
     /// Run a single step of the regressor
     pub fn step(&mut self) {
-        // generate new mutations
-        let new_formulas = self
-            .formulas
-            .iter()
-            .flat_map(|x| x.formula.mutate().into_iter())
-            .collect::<Vec<Formula>>();
-
-        // evaluate new population
-        self.formulas = new_formulas
-            .into_par_iter()
-            .filter_map(|formula| {
-                let score = formula
-                    .eval_many(self.y.len(), &self.x)
-                    .into_iter()
-                    .zip(self.y)
-                    .map(|(result, target)| (result - target) * (result - target))
-                    .sum::<f32>()
-                    / self.y.len() as f32
-                    + formula.size() * formula.size() * self.size_penalty;
-
-                // filter it out if it results in a nan
-                if score.is_nan() {
-                    None
-                } else {
-                    Some(Pair { score, formula })
-                }
-            })
-            .collect::<Vec<Pair>>();
+        // evaluate population
+        self.formulas.par_iter_mut().for_each(|pair| {
+            pair.score = (pair
+                .formula
+                .eval_many(self.y.len(), &self.x)
+                .into_iter()
+                .zip(self.y)
+                .map(|(result, target)| (result - target) * (result - target))
+                .sum::<f32>()
+                / self.y.len() as f32
+                + pair.formula.size() * pair.formula.size() * self.size_penalty)
+                .min(f32::INFINITY);
+        });
 
         // sort population, best to worst
         self.formulas.sort_by(|l, r| l.score.total_cmp(&r.score));
 
-        // prune population size
-        self.formulas.truncate(self.population);
+        // take the best samples
+        self.formulas.truncate((self.population / 10).max(1));
+
+        // where the population ends
+        let best_end = self.formulas.len();
+
+        // either mutate or reproduce the best
+        while self.formulas.len() < self.population {
+            if fastrand::bool() {
+                // specimen to mutate
+                let mut specimen = fastrand::choice(self.formulas[..best_end].iter())
+                    .unwrap_or(&self.formulas[0])
+                    .formula
+                    .clone();
+                specimen.mutate();
+                self.formulas.push(Pair {
+                    score: 0.0,
+                    formula: specimen,
+                });
+            } else {
+                let mut specimen = fastrand::choice(self.formulas[..best_end].iter())
+                    .unwrap_or(&self.formulas[0])
+                    .formula
+                    .clone();
+
+                let other = &fastrand::choice(self.formulas[..best_end].iter())
+                    .unwrap_or(&self.formulas[0])
+                    .formula;
+
+                specimen.reproduce(&other);
+
+                self.formulas.push(Pair {
+                    score: 0.0,
+                    formula: specimen,
+                });
+            }
+        }
     }
 }
