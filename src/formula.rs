@@ -89,10 +89,15 @@ impl Op {
             _ => 0.0,
         }
     }
+
+    /// get a non-commutative binary operation
+    fn is_non_commutative(self) -> bool {
+        [Op::Pow, Op::Sub, Op::Div].contains(&self)
+    }
 }
 
 /// all unary operations
-const UNOPS: &[Op] = &[
+const UNOPS: [Op; 7] = [
     Op::Neg,
     Op::Exp,
     Op::Sqrt,
@@ -103,7 +108,7 @@ const UNOPS: &[Op] = &[
 ];
 
 /// All binary operations
-const BINOPS: &[Op] = &[Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Pow];
+const BINOPS: [Op; 5] = [Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Pow];
 
 /// A single formula
 #[derive(Clone)]
@@ -223,15 +228,11 @@ impl<'a> Formula<'a> {
         clone
     }
 
-    fn delete_op_range(&self, range: RangeInclusive<usize>) -> Self {
-        let mut clone = self.clone();
-
+    fn delete_op_range(&mut self, range: RangeInclusive<usize>) {
         // delete the range
         for _ in range.clone() {
-            clone.operations.remove(*range.start());
+            self.operations.remove(*range.start());
         }
-
-        clone
     }
 
     fn random_op_idx(&self, mut f: impl FnMut(Op) -> bool) -> Option<usize> {
@@ -274,151 +275,167 @@ impl<'a> Formula<'a> {
         start..=index
     }
 
+    /// reblace a 0 with a const
+    fn change_zero(&mut self) {
+        if let Some(idx) = self.random_op_idx(|x| x == Op::Zero) {
+            self.operations[idx] = Op::Const(0.0);
+        }
+    }
+
+    /// reblace a 1 with a const
+    fn change_one(&mut self) {
+        if let Some(idx) = self.random_op_idx(|x| x == Op::One) {
+            self.operations[idx] = Op::Const(1.0);
+        }
+    }
+
+    /// reblace a pi with a const
+    fn change_pi(&mut self) {
+        if let Some(idx) = self.random_op_idx(|x| x == Op::Pi) {
+            self.operations[idx] = Op::Const(std::f32::consts::PI);
+        }
+    }
+
+    /// round a number
+    fn round_number(&mut self) {
+        if let Some(idx) = self.random_op_idx(Op::is_const) {
+            self.operations[idx] = Op::Const(self.operations[idx].get_const_value().round());
+        }
+    }
+
+    /// modify a constant
+    fn modify_number(&mut self) {
+        // range to modify
+        let power = fastrand::i32(-5..=5);
+
+        // modify it
+        if let Some(idx) = self.random_op_idx(Op::is_const) {
+            self.operations[idx] = Op::Const(
+                self.operations[idx].get_const_value()
+                    + fastrand::f32() * (10.0 as f32).powi(power),
+            );
+        }
+    }
+
+    /// replace a constant
+    fn replace_const(&mut self) {
+        if let Some(idx) = self.random_op_idx(Op::is_const) {
+            self.operations[idx] = fastrand::choice([Op::Zero, Op::One, Op::Pi]).unwrap_or(Op::One);
+        }
+    }
+
+    /// insert a unary operation
+    fn insert_unary(&mut self) {
+        self.operations.insert(
+            fastrand::usize(1..=self.operations.len()),
+            fastrand::choice(UNOPS).unwrap_or(UNOPS[0]),
+        )
+    }
+
+    /// replace a unary operation
+    fn replace_unary(&mut self) {
+        if let Some(idx) = self.random_op_idx(Op::is_unop) {
+            self.operations[idx] = fastrand::choice(UNOPS).unwrap_or(UNOPS[0]);
+        }
+    }
+
+    /// remove unary operation
+    fn remove_unary(&mut self) {
+        if let Some(idx) = self.random_op_idx(Op::is_unop) {
+            self.operations.remove(idx);
+        }
+    }
+
+    /// replace a binary operation
+    fn replace_binary(&mut self) {
+        if let Some(idx) = self.random_op_idx(Op::is_binop) {
+            self.operations[idx] = fastrand::choice(BINOPS).unwrap_or(BINOPS[0]);
+        }
+    }
+
+    /// insert a binary operation with the previous tree on the right side
+    fn insert_binop_right(&mut self) {
+        let idx = fastrand::usize(1..=self.operations.len());
+        let op = fastrand::choice(BINOPS).unwrap_or(BINOPS[0]);
+        let val = fastrand::choice(
+            [
+                Op::Var(fastrand::usize(0..self.names.len())),
+                fastrand::choice([Op::Zero, Op::One, Op::Pi, Op::Const(0.0)]).unwrap_or(Op::Zero),
+            ]
+            .into_iter(),
+        )
+        .unwrap_or(Op::Zero);
+
+        self.operations.insert(idx, op);
+        self.operations.insert(idx, val);
+    }
+
+    /// insert a binary operation with the previous tree on the left side
+    fn insert_binop_left(&mut self) {
+        // TODO: left size, basically find where it starts
+        let idx = fastrand::usize(1..=self.operations.len());
+        let op = fastrand::choice(BINOPS).unwrap_or(BINOPS[0]);
+        let val = fastrand::choice(
+            [
+                Op::Var(fastrand::usize(0..self.names.len())),
+                fastrand::choice([Op::Zero, Op::One, Op::Pi, Op::Const(0.0)]).unwrap_or(Op::Zero),
+            ]
+            .into_iter(),
+        )
+        .unwrap_or(Op::Zero);
+
+        self.operations.insert(idx, op);
+        self.operations.insert(idx, val);
+    }
+
+    /// remove a binop with it's right side
+    fn remove_binop_right(&mut self) {
+        // remove the operation
+        if let Some(idx) = self.random_op_idx(Op::is_binop) {
+            self.operations.remove(idx);
+            self.delete_op_range(self.operation_range(idx - 1));
+        }
+    }
+
+    /// remove a binop with it's left side
+    fn remove_binop_left(&mut self) {
+        // TODO: left
+        // remove the operation
+        if let Some(idx) = self.random_op_idx(Op::is_binop) {
+            self.operations.remove(idx);
+            self.delete_op_range(self.operation_range(idx - 1));
+        }
+    }
+
+    /// swap arguments of a binary operation
+    fn swap_args(&mut self) {
+        if let Some(idx) = self.random_op_idx(Op::is_non_commutative) {
+            // right range
+            let right = self.operation_range(idx - 1);
+
+            // left range
+            let left = self.operation_range(right.start() - 1);
+
+            // copy the ranges
+            let right_ops = &self.operations[right.clone()].to_vec();
+            let left_ops = &self.operations[left.clone()].to_vec();
+
+            // stitch them together
+            let swapped_ops = right_ops.into_iter().chain(left_ops.into_iter()).copied();
+
+            // write them to the original range
+            for (op, new) in self.operations[*(left.start())..=*(right.end())]
+                .iter_mut()
+                .zip(swapped_ops.into_iter())
+            {
+                *op = new;
+            }
+        }
+    }
+
     pub fn mutate(&self) -> Vec<Self> {
         // all mutations below are applied on one of the operations in the formula
         let mut mutations = Vec::with_capacity(22);
-
-        // all possible values
-        let const_values = (0..self.names.len())
-            .map(|x| Op::Var(x))
-            .collect::<Vec<Op>>();
-
-        // ourselves, no mutations
-        mutations.push(self.clone());
-
-        // replace 0 and 1 with normal numbers
-        self.random_op_idx(|x| x == Op::Zero)
-            .map(|x| mutations.push(self.replace_op(x, Op::Const(0.0))));
-
-        self.random_op_idx(|x| x == Op::One)
-            .map(|x| mutations.push(self.replace_op(x, Op::Const(1.0))));
-
-        self.random_op_idx(|x| x == Op::Pi)
-            .map(|x| mutations.push(self.replace_op(x, Op::Const(std::f32::consts::PI))));
-
-        // round a random number
-        self.random_op_idx(Op::is_const).map(|x| {
-            mutations
-                .push(self.replace_op(x, Op::Const(self.operations[x].get_const_value().round())))
-        });
-
-        // modify a constant number
-        for i in -2..=2 {
-            self.random_op_idx(Op::is_const).map(|x| {
-                mutations.push(self.replace_op(
-                    x,
-                    Op::Const(
-                        // add random offset
-                        self.operations[x].get_const_value()
-                            + (fastrand::f32() * 0.5 + 0.5) * (10.0 as f32).powi(i),
-                    ),
-                ))
-            });
-        }
-
-        // replace a constant with a 0 or 1
-        self.random_op_idx(Op::is_const)
-            .map(|x| mutations.push(self.replace_op(x, Op::Zero)));
-
-        self.random_op_idx(Op::is_const)
-            .map(|x| mutations.push(self.replace_op(x, Op::One)));
-
-        self.random_op_idx(Op::is_const)
-            .map(|x| mutations.push(self.replace_op(x, Op::Pi)));
-
-        // insert arbitrary unary operations
-        mutations.push(self.insert_op(
-            fastrand::usize(1..=self.operations.len()),
-            *fastrand::choice(UNOPS).unwrap_or(&UNOPS[0]),
-        ));
-
-        // remove arbitrary unary operations
-        self.random_op_idx(Op::is_unop)
-            .map(|x| mutations.push(self.delete_op(x)));
-
-        // replace binary operations with another
-        self.random_op_idx(Op::is_binop).map(|x| {
-            mutations.push(self.replace_op(x, *fastrand::choice(BINOPS).unwrap_or(&BINOPS[0])))
-        });
-
-        // insert binary operation with a valus on its right side
-        // aka, insert the value, and then insert a binop
-        let idx = fastrand::usize(1..=self.operations.len());
-        let op = fastrand::choice(BINOPS).unwrap_or(&BINOPS[0]);
-        let val = fastrand::choice(
-            [
-                fastrand::choice(const_values.iter()).unwrap_or(&Op::Zero),
-                fastrand::choice([Op::Zero, Op::One, Op::Pi, Op::Const(0.0)].iter())
-                    .unwrap_or(&Op::Zero),
-            ]
-            .into_iter(),
-        )
-        .unwrap_or(&Op::Zero);
-
-        let clone = self.insert_op(idx, *op);
-        mutations.push(clone.insert_op(idx, *val));
-
-        // insert a binary operation with a value on its left side
-        // aka, insert the value before one of the ends, then intert the binop at the original location
-        let idx = fastrand::usize(1..=self.operations.len());
-        let op = fastrand::choice(BINOPS).unwrap_or(&BINOPS[0]);
-        let val = fastrand::choice(
-            [
-                fastrand::choice(const_values.iter()).unwrap_or(&Op::Zero),
-                fastrand::choice([Op::Zero, Op::One, Op::Pi, Op::Const(0.0)].iter())
-                    .unwrap_or(&Op::Zero),
-            ]
-            .into_iter(),
-        )
-        .unwrap_or(&Op::Zero);
-
-        let clone = self.insert_op(idx, *op);
-        mutations.push(clone.insert_op(idx, *val));
-
-        // remove binary operation and it's right side
-        // aka, remove an entire range
-        self.random_op_idx(Op::is_binop).map(|x| {
-            // remove the op
-            let clone = self.delete_op(x);
-
-            // delete the range
-            mutations.push(clone.delete_op_range(clone.operation_range(x - 1)));
-        });
-
-        // remove binary operation and it's left side
-        // aka, remove the range before the first range
-
-        // swap arguments of binary operation
-        // find two ranges before a binop, then swap them
-        self.random_op_idx(Op::is_binop)
-            .filter(|x| *x > 0)
-            .map(|x| {
-                let mut clone = self.clone();
-
-                // right range
-                let right = self.operation_range(x - 1);
-
-                // left range
-                let left = self.operation_range(right.start() - 1);
-
-                // copy the ranges
-                let right_ops = &self.operations[right.clone()];
-                let left_ops = &self.operations[left.clone()];
-
-                // stitch them together
-                let swapped_ops = right_ops.into_iter().chain(left_ops.into_iter()).copied();
-
-                // write them to the original range
-                for (op, new) in clone.operations[*(left.start())..=*(right.end())]
-                    .iter_mut()
-                    .zip(swapped_ops.into_iter())
-                {
-                    *op = new;
-                }
-
-                // push the clone
-                mutations.push(clone);
-            });
 
         mutations
     }
