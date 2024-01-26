@@ -68,23 +68,6 @@ impl<'a> Regressor<'a> {
 
     /// Run a single step of the regressor
     pub fn step(&mut self) {
-        // evaluate population
-        self.formulas.par_iter_mut().for_each(|pair| {
-            pair.score = (pair
-                .formula
-                .eval_many(self.y.len(), &self.x)
-                .into_iter()
-                .zip(self.y)
-                .map(|(result, target)| (result - target) * (result - target))
-                .sum::<f32>()
-                / self.y.len() as f32
-                + pair.formula.size() * pair.formula.size() * self.size_penalty)
-                .min(f32::INFINITY);
-        });
-
-        // sort population, best to worst
-        self.formulas.sort_by(|l, r| l.score.total_cmp(&r.score));
-
         // take the best samples
         self.formulas.truncate((self.population / 10).max(1));
 
@@ -122,5 +105,22 @@ impl<'a> Regressor<'a> {
                 });
             }
         }
+
+        // evaluate population
+        self.formulas.par_iter_mut().for_each(|pair| {
+            pair.score = (pair
+                .formula
+                .eval_many(self.y.len(), &self.x)
+                .into_iter()
+                .zip(self.y)
+                .map(|(result, target)| (result - target) * (result - target))
+                .sum::<f32>()
+                / self.y.len() as f32
+                + pair.formula.size() * pair.formula.size() * self.size_penalty)
+                .min(f32::INFINITY);
+        });
+
+        // sort population, best to worst
+        self.formulas.sort_by(|l, r| l.score.total_cmp(&r.score));
     }
 }

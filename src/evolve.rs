@@ -232,10 +232,10 @@ impl<'a> Formula<'a> {
 
     pub fn reproduce(&mut self, other: &Self) {
         // find a chunk for ourselves
-        let own_branch = self.operation_range(fastrand::usize(1..self.operations.len()));
+        let own_branch = self.operation_range(fastrand::usize(0..self.operations.len()));
 
         // find the chunk in the other
-        let other_branch = other.operation_range(fastrand::usize(1..other.operations.len()));
+        let other_branch = other.operation_range(fastrand::usize(0..other.operations.len()));
 
         // take the other's chunk and replace our own with it
         // first delete our own
