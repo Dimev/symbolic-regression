@@ -147,7 +147,6 @@ impl<'a> Formula<'a> {
 
     /// insert a binary operation with the previous tree on the left side
     fn insert_binop_left(&mut self) {
-        // TODO: left size, basically find where it starts
         let idx = fastrand::usize(1..=self.operations.len());
         let op = fastrand::choice(BINOPS).unwrap_or(BINOPS[0]);
         let val = fastrand::choice(
@@ -160,7 +159,12 @@ impl<'a> Formula<'a> {
         .unwrap_or(Op::Zero);
 
         self.operations.insert(idx, op);
-        self.operations.insert(idx, val);
+
+        // find the range
+        let range = self.operation_range(idx - 1);
+
+        // insert it before
+        self.operations.insert(*range.start(), val);
     }
 
     /// remove a binop with it's right side
@@ -174,11 +178,16 @@ impl<'a> Formula<'a> {
 
     /// remove a binop with it's left side
     fn remove_binop_left(&mut self) {
-        // TODO: left
         // remove the operation
         if let Some(idx) = self.random_op_idx(Op::is_binop) {
+            // remove the operation
             self.operations.remove(idx);
-            self.delete_op_range(self.operation_range(idx - 1));
+
+            // find the range on the right side
+            let range = self.operation_range(idx - 1);
+
+            // remove the range
+            self.delete_op_range(self.operation_range(*range.start() - 1));
         }
     }
 
